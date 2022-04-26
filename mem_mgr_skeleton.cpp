@@ -160,23 +160,35 @@ void tlb_remove(int index) {
 
 void tlb_hit(size_t& frame, size_t& page, size_t& tlb_hits, int result) {
     tlb_hits++;
-    frame = tlb[result].frame_num;
-    page = tlb[result].npage;
+    for(int i = 0; i < TLB_SIZE; i++){
+        if (tlb[i].npage == page) {
+            std::cout << "FOUND TLB HIT: " << std::endl;
+            std::cout << "ORIGINAL FRAME: " << frame << std::endl;
+            frame = tlb[i].frame_num;
+            std::cout << "NEW FRAME: " << frame << std::endl;
+            return;
+        }
+    }
 
   }  // TODO
 
+  void fifo_replace_page(size_t& frame ) {
+    tlb_remove(0);
+    std::cout << "FIFO REPLACED" << std::endl;
+
+ }   // TODO
+
 void tlb_miss(size_t& frame, size_t& page, size_t& tlb_track) {
-    tlb_track++;
+    if(tlb_track > TLB_SIZE){
+        fifo_replace_page(frame);
+    }
+    tlb_track = 0;
     tlb_add(tlb_track, pg_table[page]);
     frame = pg_table[page].frame_num;
 
  } // TODO
 
-void fifo_replace_page(size_t& frame ) {
-    tlb_remove(0);
-    std::cout << "FIFO REPLACED" << std::endl;
 
- }   // TODO
 
 void lru_replace_page(size_t& frame) {
     frame = pg_table[0].frame_num;
@@ -214,6 +226,7 @@ void page_fault(size_t& frame, size_t& page, size_t& frames_used, size_t& pg_fau
     update_frame_ptable(page, frame);
   
     tlb_add(tlb_track++, pg_table[page]);
+    // tlb[0].frame_num = 0;
     if (tlb_track > 15) { tlb_track = 0; }
     
     ++frames_used;
@@ -254,7 +267,7 @@ void run_simulation() {
     FILE *faddress, *fcorrect, *fbacking;
     open_files(faddress, fcorrect, fbacking);
 
-    for (int o = 0; o < 85; o++) {     // read from file correct.txt
+    for (int o = 0; o < 75; o++) {     // read from file correct.txt
         fscanf(fcorrect, "%s %s %lu %s %s %lu %s %ld", buf, buf, &virt_add, buf, buf, &phys_add, buf, &value);  
 
         fscanf(faddress, "%ld", &logic_add);  
@@ -262,25 +275,30 @@ void run_simulation() {
 
         std::cout << "current address page and offset: " << page << " " << offset << std::endl;
 
+
+
         int result = check_tlb(page);
+
         if (result >= 0) {  
             // if its in tlb
+            std::cout << "RESULT IN HIT" << std::endl;
             tlb_hit(frame, page, tlb_hits, result); 
         } else if (pg_table[page].is_present) { // if not check page table
+            std::cout << "RESULT IN MISS" << std::endl;
             tlb_miss(frame, page, tlb_track);
         } else {         // page fault
             page_fault(frame, page, frames_used, pg_faults, tlb_track, fbacking);
         }
 
-
+        std::cout << "PHYSICAL FRAME: " << frame << std::endl;
         physical_add = (frame * FRAME_SIZE) + offset;
         val = (int)*(ram + physical_add);
 
         check_address_value(logic_add, page, offset, physical_add, prev_frame, frame, val, value, o);
 
-    //         for(int i = 0; i < TLB_SIZE; i++){
-    //     std::cout << "TLB " << i << ": " << tlb[i].npage <<  "  PTABLE " << i << ": " << pg_table[i].npage <<  std::endl;
-    // }
+            for(int i = 0; i < TLB_SIZE; i++){
+        std::cout << "TLB " << i << ": " << tlb[i].npage << " TLB FRAME " << i << ": " << tlb[i].frame_num <<  "  PTABLE " << i << ": " << pg_table[i].frame_num <<  std::endl;
+    }
     }
     summarize(pg_faults, tlb_hits);
 
